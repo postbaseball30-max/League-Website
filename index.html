@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v15 full site fixed leaders + team stats</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v16 exact sheet rows</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -207,63 +207,42 @@ function parseLeaders(){
   const rows = db.raw[TABS.leaders] || [];
   const leaders = { Hitters:{}, Pitchers:{}, Fielders:{} };
 
-  // EXACT Leaders tab layout:
-  // Row 0 = section titles
-  // Row 1 = headers
-  // Row 2+ = data
+  // Copy exactly what appears in Leaders tab:
+  // Batting table:
+  // A = Cat, E = Player, F = #, G = Stat
+  // Pitching table:
+  // I = Cat, M = Player, N = #, O = Stat
+  // Fielding table:
+  // Q = Cat, U = Player, V = #, W = Stat
   //
-  // Hitters:
-  // Category = A / r[0]
-  // Player   = E / r[4]
-  // Stat     = G / r[6] for first displayed stat row, otherwise F / r[5] when G is blank
-  //
-  // Pitchers:
-  // Category = I / r[8]
-  // Player   = M / r[12]
-  // Stat     = O / r[14] for first displayed stat row, otherwise N / r[13] when O is blank
-  //
-  // Fielders:
-  // Category = Q / r[16]
-  // Player   = U / r[20]
-  // Stat     = W / r[22] for first displayed stat row, otherwise V / r[21] when W is blank
+  // The first row in each category has the value duplicated in the Stat column.
+  // The next rows have the value in the # column. So use Stat if present, otherwise #.
 
-  for(let i=2;i<rows.length;i++){
+  for(let i = 2; i < rows.length; i++){
     const r = rows[i] || [];
 
     const hitCat = (r[0] || "").trim();
     const hitPlayer = cleanName(r[4]);
-    const hitStat = ((r[6] || "").trim() || (r[5] || "").trim());
-
-    if(hitCat && hitPlayer && hitStat){
+    const hitValue = ((r[6] || "").trim() || (r[5] || "").trim());
+    if(hitCat && hitPlayer && hitValue){
       if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat] = [];
-      leaders.Hitters[hitCat].push({
-        player: hitPlayer,
-        value: hitStat
-      });
+      leaders.Hitters[hitCat].push({ player: hitPlayer, value: hitValue });
     }
 
     const pitCat = (r[8] || "").trim();
     const pitPlayer = cleanName(r[12]);
-    const pitStat = ((r[14] || "").trim() || (r[13] || "").trim());
-
-    if(pitCat && pitPlayer && pitStat){
+    const pitValue = ((r[14] || "").trim() || (r[13] || "").trim());
+    if(pitCat && pitPlayer && pitValue){
       if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat] = [];
-      leaders.Pitchers[pitCat].push({
-        player: pitPlayer,
-        value: pitStat
-      });
+      leaders.Pitchers[pitCat].push({ player: pitPlayer, value: pitValue });
     }
 
     const fldCat = (r[16] || "").trim();
     const fldPlayer = cleanName(r[20]);
-    const fldStat = ((r[22] || "").trim() || (r[21] || "").trim());
-
-    if(fldCat && fldPlayer && fldStat){
+    const fldValue = ((r[22] || "").trim() || (r[21] || "").trim());
+    if(fldCat && fldPlayer && fldValue){
       if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat] = [];
-      leaders.Fielders[fldCat].push({
-        player: fldPlayer,
-        value: fldStat
-      });
+      leaders.Fielders[fldCat].push({ player: fldPlayer, value: fldValue });
     }
   }
 
@@ -457,13 +436,23 @@ function parseSplitTab(rows){
 function parseTeamStats(){
   const rows = db.raw[TABS.teams] || [];
 
-  // EXACT Teams tab layout:
-  // Pitching section:
-  // Header row = CSV row index 1
-  // Data rows  = CSV row indexes 2 through 11
+  // EXACT GOOGLE SHEET ROWS:
+  // Sheet row 2  = Pitching headers
+  // Sheet rows 3-12 = Pitching data
+  // Sheet row 24 = Batting headers
+  // Sheet rows 25-34 = Batting data
+  // Sheet row 45 = Fielding headers
+  // Sheet rows 46-55 = Fielding data
+  //
+  // JavaScript arrays are zero-based:
+  // Sheet row 3  => rows[2]
+  // Sheet row 25 => rows[24]
+  // Sheet row 46 => rows[45]
+
   db.teamStats = rows.slice(2,12).map(r => ({
     logo: r[0],
     team: String(r[1] || "").trim().toUpperCase(),
+
     W: r[2],
     L: r[3],
     SV: r[4],
@@ -496,12 +485,10 @@ function parseTeamStats(){
     "SO/BB": r[31]
   })).filter(t => t.team);
 
-  // Batting section:
-  // Header row = CSV row index 23
-  // Data rows  = CSV row indexes 24 through 33
   db.teamBattingStats = rows.slice(24,34).map(r => ({
     logo: r[0],
     team: String(r[1] || "").trim().toUpperCase(),
+
     PA: r[2],
     AB: r[3],
     H: r[4],
@@ -530,12 +517,10 @@ function parseTeamStats(){
     CS: r[27]
   })).filter(t => t.team);
 
-  // Fielding section:
-  // Header row = CSV row index 44
-  // Data rows  = CSV row indexes 45 through 54
   db.teamFieldingStats = rows.slice(45,55).map(r => ({
     logo: r[0],
     team: String(r[1] || "").trim().toUpperCase(),
+
     XCH: r[2],
     XHit: r[3],
     Err: r[4],
@@ -829,7 +814,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","Leaderboards copied from the Leaders tab and showing top 5 per category.","📊")+`
+    return head("Leaderboards / Stats","Leaderboards copied exactly from the Leaders tab.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
