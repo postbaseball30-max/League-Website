@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v9 splits + fixed leaders</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v10 splits + team stats</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -87,12 +87,13 @@ const TABS={
   batters:"Batters",
   pitchers:"Pitcher",
   battingSplits:"Batting Splits",
-  pitcherSplits:"Pitcher Splits"
+  pitcherSplits:"Pitcher Splits",
+  teams:"Teams"
 };
 
 const TEAM_TABS=["CWY","LBS","OVR","OWL","PIT","Pit","RHN","SML","TK","TOR","UCH"];
 
-let db={raw:{},standings:[],leaders:{Hitters:{},Pitchers:{},Fielders:{}},league:{free:[],inj:[],draft:[],dates:[]},rosters:{},players:[],batters:[],pitchers:[],batSplits:[],pitSplits:[],records:[],schedule:[],fullSeason:[],postseason:[]};
+let db={raw:{},standings:[],leaders:{Hitters:{},Pitchers:{},Fielders:{}},league:{free:[],inj:[],draft:[],dates:[]},rosters:{},players:[],batters:[],pitchers:[],batSplits:[],pitSplits:[],records:[],schedule:[],fullSeason:[],postseason:[],teamStats:[]};
 
 let state={page:"Standings",player:null,team:null,stats:"Hitters",pos:"ALL",search:"",records:"Game / Season Records",career:"Hitters",schedule:"Current Week"};
 
@@ -167,6 +168,7 @@ function normalize(){
   parsePlayers();
   parseSplits();
   parseGenericTabs();
+  parseTeamStats();
 }
 
 function parseStandings(){
@@ -204,20 +206,17 @@ function parseLeaders(){
   const rows=db.raw[TABS.leaders]||[];
   const leaders={Hitters:{},Pitchers:{},Fielders:{}};
 
-  // Leaders CSV exact structure:
-  // Row 0 = section titles
-  // Row 1 = headers
-  // Row 2+ = real data
-  //
-  // Batting:  A category r[0], E player r[4], F/G stat r[5] or r[6]
-  // Pitching: I category r[8], M player r[12], N/O stat r[13] or r[14]
-  // Fielding: Q category r[16], U player r[20], V/W stat r[21] or r[22]
+  // Leaders CSV layout:
+  // row 0 = section titles, row 1 = headers, row 2+ = data.
+  // Hitting: category A/r[0], player E/r[4], stat G/r[6] OR F/r[5]
+  // Pitching: category I/r[8], player M/r[12], stat O/r[14] OR N/r[13]
+  // Fielding: category Q/r[16], player U/r[20], stat W/r[22] OR V/r[21]
   for(let i=2;i<rows.length;i++){
     const r=rows[i]||[];
 
     const hitCat=(r[0]||"").trim();
     const hitPlayer=cleanName(r[4]);
-    const hitStat=(r[6]||r[5]||"").trim();
+    const hitStat=((r[6]||"").trim() || (r[5]||"").trim());
     if(hitCat && hitPlayer && hitStat){
       if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat]=[];
       leaders.Hitters[hitCat].push({player:hitPlayer,value:hitStat});
@@ -225,7 +224,7 @@ function parseLeaders(){
 
     const pitCat=(r[8]||"").trim();
     const pitPlayer=cleanName(r[12]);
-    const pitStat=(r[14]||r[13]||"").trim();
+    const pitStat=((r[14]||"").trim() || (r[13]||"").trim());
     if(pitCat && pitPlayer && pitStat){
       if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat]=[];
       leaders.Pitchers[pitCat].push({player:pitPlayer,value:pitStat});
@@ -233,7 +232,7 @@ function parseLeaders(){
 
     const fldCat=(r[16]||"").trim();
     const fldPlayer=cleanName(r[20]);
-    const fldStat=(r[22]||r[21]||"").trim();
+    const fldStat=((r[22]||"").trim() || (r[21]||"").trim());
     if(fldCat && fldPlayer && fldStat){
       if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat]=[];
       leaders.Fielders[fldCat].push({player:fldPlayer,value:fldStat});
@@ -241,14 +240,6 @@ function parseLeaders(){
   }
 
   db.leaders=leaders;
-  db.leaderDebug={
-    rawRow3:rows[2]||[],
-    firstParsed:{
-      hitter:Object.keys(leaders.Hitters).length ? leaders.Hitters[Object.keys(leaders.Hitters)[0]][0] : null,
-      pitcher:Object.keys(leaders.Pitchers).length ? leaders.Pitchers[Object.keys(leaders.Pitchers)[0]][0] : null,
-      fielder:Object.keys(leaders.Fielders).length ? leaders.Fielders[Object.keys(leaders.Fielders)[0]][0] : null
-    }
-  };
 }
 
 function extractUrl(v){
@@ -317,92 +308,35 @@ function parseRosters(){
 }
 
 function parsePlayers(){
-  // Batters CSV structure:
-  // Row 0 = formulas
-  // Row 1 = headers
-  // Row 2+ = player rows
+  // Batters CSV:
+  // Row 0 formulas, row 1 headers, row 2+ data
   const bRows=db.raw[TABS.batters]||[];
-  db.batters=[];
-  if(bRows.length>1){
-    db.batters=bRows.slice(2).filter(r=>r[2]).map(r=>({
-      player:cleanName(r[2]),
-      cardUrl:extractUrl(r[0]),
-      qualified:r[1],
-      positions:"BAT",
-      PA:r[3],
-      AB:r[4],
-      H:r[5],
-      RBI:r[6],
-      HR:r[7],
-      "3B":r[8],
-      "2B":r[9],
-      "1B":r[10],
-      BB:r[11],
-      K:r[12],
-      AVG:r[13],
-      OBP:r[14],
-      SLG:r[15],
-      OPS:r[16],
-      HBP:r[17],
-      SAC:r[18],
-      IBB:r[19],
-      DP:r[20],
-      BPHR:r[21],
-      BPFO:r[22],
-      BP1B:r[23],
-      BPLO:r[24],
-      LOB:r[25],
-      R:r[26],
-      SB:r[27],
-      CS:r[28]
-    }));
-  }
+  db.batters=bRows.slice(2).filter(r=>r[2]).map(r=>({
+    player:cleanName(r[2]),
+    cardUrl:extractUrl(r[0]),
+    qualified:r[1],
+    team:"",
+    positions:"BAT",
+    PA:r[3], AB:r[4], H:r[5], RBI:r[6], HR:r[7], "3B":r[8], "2B":r[9], "1B":r[10],
+    BB:r[11], K:r[12], AVG:r[13], OBP:r[14], SLG:r[15], OPS:r[16],
+    HBP:r[17], SAC:r[18], IBB:r[19], DP:r[20], BPHR:r[21], BPFO:r[22], BP1B:r[23], BPLO:r[24], LOB:r[25], R:r[26], SB:r[27], CS:r[28]
+  }));
 
-  // Pitchers CSV structure:
-  // Row 0 = formulas
-  // Row 1 = headers
-  // Row 2+ = player rows
+  // Pitchers CSV:
+  // Row 0 formulas, row 1 headers, row 2+ data
   const pRows=db.raw[TABS.pitchers]||[];
-  db.pitchers=[];
-  if(pRows.length>1){
-    db.pitchers=pRows.slice(2).filter(r=>r[3]).map(r=>({
-      player:cleanName(r[3]),
-      cardUrl:extractUrl(r[0]),
-      qualified:r[1],
-      positions:r[2]||"P",
-      role:r[2]||"P",
-      W:r[4],
-      L:r[5],
-      SV:r[6],
-      HD:r[7],
-      BS:r[8],
-      IP:r[9],
-      ERA:r[10],
-      WHIP:r[11],
-      HR:r[12],
-      "3B":r[13],
-      "2B":r[14],
-      "1B":r[15],
-      BB:r[16],
-      K:r[17],
-      HBP:r[18],
-      IBB:r[19],
-      DP:r[20],
-      BPHR:r[21],
-      BPFO:r[22],
-      BP1B:r[23],
-      BPLO:r[24],
-      LOB:r[25],
-      WP:r[26],
-      BK:r[27],
-      R:r[28],
-      ER:r[29],
-      "HR/9":r[30],
-      "BB/9":r[31],
-      "SO/9":r[32],
-      "SO/BB":r[33]
-    }));
-  }
+  db.pitchers=pRows.slice(2).filter(r=>r[3]).map(r=>({
+    player:cleanName(r[3]),
+    cardUrl:extractUrl(r[0]),
+    qualified:r[1],
+    team:"",
+    positions:r[2]||"P",
+    role:r[2]||"P",
+    W:r[4], L:r[5], SV:r[6], HD:r[7], BS:r[8], IP:r[9], ERA:r[10], WHIP:r[11],
+    HR:r[12], "3B":r[13], "2B":r[14], "1B":r[15], BB:r[16], K:r[17],
+    HBP:r[18], IBB:r[19], DP:r[20], BPHR:r[21], BPFO:r[22], BP1B:r[23], BPLO:r[24], LOB:r[25],
+    WP:r[26], BK:r[27], R:r[28], ER:r[29], "HR/9":r[30], "BB/9":r[31], "SO/9":r[32], "SO/BB":r[33]
+  }));
 
   db.players=[...db.batters,...db.pitchers,...Object.values(db.rosters).flat(),...db.league.free].reduce((a,p)=>{
     const name=p.player;
@@ -417,40 +351,118 @@ function parseSplits(){
 }
 
 function parseSplitTab(rows){
-  // Batting Splits / Pitcher Splits layout:
-  // Row 0 = formulas/title
-  // Row 1 = headers
-  // Row 2+ = data
-  const idx=rows.findIndex(r=>r.includes("name")&&r.includes("Split"));
-  if(idx<0)return[];
+  // Uploaded split CSVs:
+  // Row 0 formulas/title, row 1 headers, row 2+ data.
+  // Batting Splits headers: Player, Team, name, TM, Split, PA...
+  // Pitcher Splits headers: Player, Team, name, TM, Role, Split, BF...
+  if(!rows || rows.length<3)return[];
+  const headers=rows[1]||[];
+  const isPitcher=headers.includes("BF") || headers.includes("Role");
 
-  return toObjects(rows,idx).map(r=>({
-    player:cleanName(r.name||r.Player),
-    team:r.TM||r.Team,
-    role:r.Role||"",
-    split:r.Split||"",
-    PA:r.PA,
-    AB:r.AB,
-    H:r.H,
-    RBI:r.RBI,
-    HR:r.HR,
-    "3B":r["3B"],
-    "2B":r["2B"],
-    "1B":r["1B"],
-    BB:r.BB,
-    K:r.K,
-    AVG:r.AVG,
-    OBP:r.OBP,
-    SLG:r.SLG,
-    OPS:r.OPS,
-    BF:r.BF,
-    WHIP:r.WHIP,
-    ERA:r.ERA,
-    "HR/9":r["HR/9"],
-    "BB/9":r["BB/9"],
-    "SO/9":r["SO/9"],
-    "SO/BB":r["SO/BB"]
-  })).filter(r=>r.player);
+  return rows.slice(2).filter(r=>r[2]).map(r=>{
+    if(isPitcher){
+      return {
+        player:cleanName(r[2]),
+        cardUrl:extractUrl(r[0]),
+        team:r[3],
+        role:r[4],
+        split:r[5],
+        BF:r[6],
+        WHIP:r[7],
+        HR:r[8],
+        "3B":r[9],
+        "2B":r[10],
+        "1B":r[11],
+        BB:r[12],
+        K:r[13],
+        AVG:r[14],
+        OBP:r[15],
+        SLG:r[16],
+        OPS:r[17],
+        HBP:r[18],
+        IBB:r[19],
+        DP:r[20],
+        BPHR:r[21],
+        BPFO:r[22],
+        BP1B:r[23],
+        BPLO:r[24],
+        LOB:r[25],
+        "HR/9":r[26],
+        "BB/9":r[27],
+        "SO/9":r[28],
+        "SO/BB":r[29]
+      };
+    }
+
+    return {
+      player:cleanName(r[2]),
+      cardUrl:extractUrl(r[0]),
+      team:r[3],
+      split:r[4],
+      PA:r[5],
+      AB:r[6],
+      H:r[7],
+      RBI:r[8],
+      HR:r[9],
+      "3B":r[10],
+      "2B":r[11],
+      "1B":r[12],
+      BB:r[13],
+      K:r[14],
+      AVG:r[15],
+      OBP:r[16],
+      SLG:r[17],
+      OPS:r[18],
+      HBP:r[19],
+      SAC:r[20],
+      IBB:r[21],
+      DP:r[22],
+      BPHR:r[23],
+      BPFO:r[24],
+      BP1B:r[25],
+      BPLO:r[26],
+      LOB:r[27]
+    };
+  }).filter(r=>r.player);
+}
+
+function parseTeamStats(){
+  const rows=db.raw[TABS.teams]||[];
+  // Teams CSV row 1 headers, row 2+ data
+  db.teamStats=rows.slice(2).filter(r=>r[1]).map(r=>({
+    logo:r[0],
+    team:r[1],
+    W:r[2],
+    L:r[3],
+    SV:r[4],
+    HD:r[5],
+    BS:r[6],
+    IP:r[7],
+    ERA:r[8],
+    WHIP:r[9],
+    HR:r[10],
+    "3B":r[11],
+    "2B":r[12],
+    "1B":r[13],
+    BB:r[14],
+    K:r[15],
+    HBP:r[16],
+    IBB:r[17],
+    DP:r[18],
+    BPHR:r[19],
+    BPFO:r[20],
+    BP1B:r[21],
+    BPLO:r[22],
+    LOB:r[23],
+    WP:r[24],
+    BK:r[25],
+    R:r[26],
+    ER:r[27],
+    "HR/9":r[28],
+    "BB/9":r[29],
+    "SO/9":r[30],
+    "SO/BB":r[31]
+  }));
 }
 
 function toObjects(rows,idx){
@@ -509,70 +521,37 @@ function renderPlayerPage(p){
   const pitcher=db.pitchers.find(x=>x.player===p.player);
   const stat=hitter||pitcher||p;
   const isPitcher=!!pitcher&&!hitter;
-  const splits=(isPitcher?db.pitSplits:db.batSplits).filter(x=>x.player===p.player);
 
-  const cardUrl=stat.cardUrl||p.cardUrl||"";
+  const splits=(isPitcher?db.pitSplits:db.batSplits).filter(x=>x.player===p.player);
+  if(!stat.team && splits.length) stat.team=splits[0].team;
+
+  const cardUrl=stat.cardUrl||p.cardUrl||(splits[0]&&splits[0].cardUrl)||"";
   const cardHtml=cardUrl
     ? `<div class="card"><img class="player-card-img" src="${cardUrl}" alt="${p.player} card"><a class="download-card" href="${cardUrl}" target="_blank">Open / Download Card</a></div>`
     : `<div class="card muted">No player card linked yet.</div>`;
 
   const seasonCols=isPitcher
     ? [
-      {key:"qualified",label:"Qualified"},
-      {key:"positions",label:"Role"},
-      {key:"W",label:"W"},
-      {key:"L",label:"L"},
-      {key:"SV",label:"SV"},
-      {key:"HD",label:"HD"},
-      {key:"BS",label:"BS"},
-      {key:"IP",label:"IP"},
-      {key:"ERA",label:"ERA"},
-      {key:"WHIP",label:"WHIP"},
-      {key:"HR",label:"HR"},
-      {key:"BB",label:"BB"},
-      {key:"K",label:"K"},
-      {key:"R",label:"R"},
-      {key:"ER",label:"ER"},
-      {key:"HR/9",label:"HR/9"},
-      {key:"BB/9",label:"BB/9"},
-      {key:"SO/9",label:"SO/9"},
-      {key:"SO/BB",label:"SO/BB"}
+      {key:"qualified",label:"Qualified"},{key:"positions",label:"Role"},{key:"W",label:"W"},{key:"L",label:"L"},{key:"SV",label:"SV"},{key:"HD",label:"HD"},{key:"BS",label:"BS"},
+      {key:"IP",label:"IP"},{key:"ERA",label:"ERA"},{key:"WHIP",label:"WHIP"},{key:"HR",label:"HR"},{key:"BB",label:"BB"},{key:"K",label:"K"},{key:"R",label:"R"},{key:"ER",label:"ER"},
+      {key:"HR/9",label:"HR/9"},{key:"BB/9",label:"BB/9"},{key:"SO/9",label:"SO/9"},{key:"SO/BB",label:"SO/BB"}
     ]
     : [
-      {key:"qualified",label:"Qualified"},
-      {key:"PA",label:"PA"},
-      {key:"AB",label:"AB"},
-      {key:"H",label:"H"},
-      {key:"RBI",label:"RBI"},
-      {key:"HR",label:"HR"},
-      {key:"3B",label:"3B"},
-      {key:"2B",label:"2B"},
-      {key:"1B",label:"1B"},
-      {key:"BB",label:"BB"},
-      {key:"K",label:"K"},
-      {key:"AVG",label:"AVG"},
-      {key:"OBP",label:"OBP"},
-      {key:"SLG",label:"SLG"},
-      {key:"OPS",label:"OPS"},
-      {key:"HBP",label:"HBP"},
-      {key:"SAC",label:"SAC"},
-      {key:"IBB",label:"IBB"},
-      {key:"DP",label:"DP"},
-      {key:"LOB",label:"LOB"},
-      {key:"R",label:"R"},
-      {key:"SB",label:"SB"},
-      {key:"CS",label:"CS"}
+      {key:"qualified",label:"Qualified"},{key:"PA",label:"PA"},{key:"AB",label:"AB"},{key:"H",label:"H"},{key:"RBI",label:"RBI"},{key:"HR",label:"HR"},
+      {key:"3B",label:"3B"},{key:"2B",label:"2B"},{key:"1B",label:"1B"},{key:"BB",label:"BB"},{key:"K",label:"K"},{key:"AVG",label:"AVG"},{key:"OBP",label:"OBP"},
+      {key:"SLG",label:"SLG"},{key:"OPS",label:"OPS"},{key:"HBP",label:"HBP"},{key:"SAC",label:"SAC"},{key:"IBB",label:"IBB"},{key:"DP",label:"DP"},{key:"LOB",label:"LOB"},
+      {key:"R",label:"R"},{key:"SB",label:"SB"},{key:"CS",label:"CS"}
     ];
 
   const splitCols=isPitcher
-    ? ["split","BF","WHIP","HR","BB","K","AVG","OBP","SLG","OPS"].map(k=>({key:k,label:k}))
-    : ["split","PA","AB","H","RBI","HR","BB","K","AVG","OBP","SLG","OPS"].map(k=>({key:k,label:k}));
+    ? ["split","team","role","BF","WHIP","HR","3B","2B","1B","BB","K","AVG","OBP","SLG","OPS","HR/9","BB/9","SO/9","SO/BB"].map(k=>({key:k,label:k}))
+    : ["split","team","PA","AB","H","RBI","HR","3B","2B","1B","BB","K","AVG","OBP","SLG","OPS","HBP","SAC","IBB","DP","LOB"].map(k=>({key:k,label:k}));
 
   return `${btn("← Back","setPage('Free Agents')","back-btn")}
     ${cardHtml}
     <div class="card">
       <h1>${p.player}</h1>
-      <p class="muted">${stat.positions||stat.role||""}</p>
+      <p class="muted">${stat.positions||stat.role||""} ${stat.team?`• Team ${btn(stat.team,`openTeam('${stat.team}')`)}`:""}</p>
       <h2>Season Stats</h2>
       ${table(seasonCols,[stat])}
     </div>
@@ -590,6 +569,11 @@ function renderTeamPage(t){
       <div class="stat-box"><div class="stat-label">GB</div><div class="stat-value">${t.gb||"-"}</div></div>
       <div class="stat-box"><div class="stat-label">Streak</div><div class="stat-value">${t.streak||"-"}</div></div>
     </div>
+    <h2>Team Pitching Totals</h2>
+    ${table([
+      {key:"W",label:"W"},{key:"L",label:"L"},{key:"SV",label:"SV"},{key:"HD",label:"HD"},{key:"BS",label:"BS"},{key:"IP",label:"IP"},{key:"ERA",label:"ERA"},{key:"WHIP",label:"WHIP"},
+      {key:"HR",label:"HR"},{key:"BB",label:"BB"},{key:"K",label:"K"},{key:"R",label:"R"},{key:"ER",label:"ER"},{key:"HR/9",label:"HR/9"},{key:"BB/9",label:"BB/9"},{key:"SO/9",label:"SO/9"},{key:"SO/BB",label:"SO/BB"}
+    ], db.teamStats.filter(x=>String(x.team).toUpperCase()===String(t.tm).toUpperCase()))}
     <h2>Roster</h2>
     ${table([
       {key:"player",label:"Player",render:r=>btn(r.player,`openPlayer('${String(r.player).replace(/'/g,"\\'")}')`)},
@@ -675,7 +659,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","v9: Leaders fixed + player season stats + batting/pitching splits.","📊")+`
+    return head("Leaderboards / Stats","v10: Player stats, splits, team totals, and fixed leader parsing.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
