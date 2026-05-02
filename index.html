@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v6 dark mode + team logos</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v7 debug leaders + logos</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -96,7 +96,7 @@ let db={raw:{},standings:[],leaders:{Hitters:{},Pitchers:{},Fielders:{}},league:
 
 let state={page:"Standings",player:null,team:null,stats:"Hitters",pos:"ALL",search:"",records:"Game / Season Records",career:"Hitters",schedule:"Current Week"};
 
-const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Records","Postseason"];
+const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Records","Postseason","Debug"];
 
 function applyTheme(){
   const mode=localStorage.getItem("opsTheme")||"light";
@@ -175,6 +175,7 @@ function parseStandings(){
   // row 1 index 1: Logo, TM, Team, W, L, %, RD, GB, Format, TM, E#, Streak, RS, RA, Run Diff, Pythag, Home, Away, 1 Run, Extras, Last 8, FLAG, gb
   db.standings=rows.slice(2).filter(r=>r[1]&&r[2]).map((r,i)=>({
     rank:i+1,
+    logo:r[0],
     tm:r[1],
     team:r[2],
     w:r[3],
@@ -203,32 +204,44 @@ function parseLeaders(){
   const rows=db.raw[TABS.leaders]||[];
   const leaders={Hitters:{},Pitchers:{},Fielders:{}};
 
-  // Exact Leaders layout:
-  // Batting:  A category, E player, G stat for row 3, F stat for rows below
-  // Pitching: I category, M player, O stat for row 3, N stat for rows below
-  // Fielding: Q category, U player, W stat for row 3, V stat for rows below
-  // This keeps Jose Miranda / Logan Gilbert / Bobby Witt Jr AND the rest of the top 5.
-  rows.slice(2).forEach(r=>{
-    const hitCat=r[0], hitPlayer=r[4], hitStat=r[6]||r[5];
+  // Exact Leaders layout from the CSV:
+  // Row index 2 is the first real leader row.
+  // Hitters: A category / E player / G stat for first row, F stat for following rows.
+  // Pitchers: I category / M player / O stat for first row, N stat for following rows.
+  // Fielders: Q category / U player / W stat for first row, V stat for following rows.
+  db.leaderDebug={
+    rawRow3: rows[2] || [],
+    rawRow4: rows[3] || []
+  };
+
+  for(let i=2;i<rows.length;i++){
+    const r=rows[i]||[];
+
+    const hitCat=r[0], hitPlayer=r[4], hitStat=(r[6] && r[6] !== "") ? r[6] : r[5];
     if(hitCat && hitPlayer && hitStat){
       if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat]=[];
       leaders.Hitters[hitCat].push({player:cleanName(hitPlayer), value:hitStat});
     }
 
-    const pitCat=r[8], pitPlayer=r[12], pitStat=r[14]||r[13];
+    const pitCat=r[8], pitPlayer=r[12], pitStat=(r[14] && r[14] !== "") ? r[14] : r[13];
     if(pitCat && pitPlayer && pitStat){
       if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat]=[];
       leaders.Pitchers[pitCat].push({player:cleanName(pitPlayer), value:pitStat});
     }
 
-    const fldCat=r[16], fldPlayer=r[20], fldStat=r[22]||r[21];
+    const fldCat=r[16], fldPlayer=r[20], fldStat=(r[22] && r[22] !== "") ? r[22] : r[21];
     if(fldCat && fldPlayer && fldStat){
       if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat]=[];
       leaders.Fielders[fldCat].push({player:cleanName(fldPlayer), value:fldStat});
     }
-  });
+  }
 
   db.leaders=leaders;
+  db.leaderDebug.firstParsed={
+    hitter:Object.keys(leaders.Hitters).length ? leaders.Hitters[Object.keys(leaders.Hitters)[0]][0] : null,
+    pitcher:Object.keys(leaders.Pitchers).length ? leaders.Pitchers[Object.keys(leaders.Pitchers)[0]][0] : null,
+    fielder:Object.keys(leaders.Fielders).length ? leaders.Fielders[Object.keys(leaders.Fielders)[0]][0] : null
+  };
 }
 
 function extractUrl(v){
@@ -421,7 +434,7 @@ function renderPlayerPage(p){
 
 function renderTeamPage(t){
   const roster=db.rosters[String(t.tm).toUpperCase()]||[];
-  const logo=(db.teamMeta&&db.teamMeta[String(t.tm).toUpperCase()]&&db.teamMeta[String(t.tm).toUpperCase()].logoUrl)||"";
+  const logo=t.logo || ((db.teamMeta&&db.teamMeta[String(t.tm).toUpperCase()]&&db.teamMeta[String(t.tm).toUpperCase()].logoUrl)||"");
   return `${btn("← Back","setPage('Teams')","back-btn")}
     <div class="card team-hero"><div><h1>${t.team}</h1><p class="muted">${t.tm} • ${t.w}-${t.l} • ${t.pct}</p></div>${logo?`<img class="team-logo" src="${logo}" alt="${t.team} logo">`:""}</div>
     <div class="grid grid-4">
@@ -515,7 +528,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","Leaders from Leaders tab. Team/logo URL columns are ignored.","📊")+`
+    return head("Leaderboards / Stats","v7: Leaders parsed directly from row 3; team/logo URL columns ignored.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
@@ -536,6 +549,23 @@ function renderPage(){
 
   if(state.page==="Postseason"){
     return head("Postseason","Postseason results.","🏆")+table(Object.keys(db.postseason[0]||{}).map(k=>({key:k,label:k})),db.postseason);
+  }
+
+  if(state.page==="Debug"){
+    const d=db.leaderDebug||{};
+    const raw3=d.rawRow3||[];
+    const raw4=d.rawRow4||[];
+    const first=d.firstParsed||{};
+    const logoRows=db.standings.map(t=>({tm:t.tm,team:t.team,logo:t.logo}));
+    return head("Debug","Use this to verify what the live site is reading from Google Sheets.","🛠️")+
+      `<div class="card"><h2>First Parsed Leaders</h2>
+        <p><b>Hitter:</b> ${first.hitter?first.hitter.player+" - "+first.hitter.value:"none"}</p>
+        <p><b>Pitcher:</b> ${first.pitcher?first.pitcher.player+" - "+first.pitcher.value:"none"}</p>
+        <p><b>Fielder:</b> ${first.fielder?first.fielder.player+" - "+first.fielder.value:"none"}</p>
+      </div>`+
+      `<div class="card"><h2>Raw Leaders Row 3</h2><pre style="white-space:pre-wrap;overflow:auto;">${JSON.stringify(raw3,null,2)}</pre></div>`+
+      `<div class="card"><h2>Raw Leaders Row 4</h2><pre style="white-space:pre-wrap;overflow:auto;">${JSON.stringify(raw4,null,2)}</pre></div>`+
+      `<div class="card"><h2>Team Logo URLs From Standings</h2>${table([{key:"tm",label:"TM"},{key:"team",label:"Team"},{key:"logo",label:"Logo URL"}],logoRows)}</div>`;
   }
 
   return "";
