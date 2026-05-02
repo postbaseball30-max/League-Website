@@ -38,7 +38,7 @@ input,select{border:1px solid #cbd5e1;border-radius:12px;padding:10px 12px;backg
 .stat-label{color:#64748b;font-size:13px}
 .stat-value{font-size:32px;font-weight:900}
 .back-btn{background:#fff;border:1px solid #cbd5e1;color:#334155;margin-bottom:16px}
-.muted{color:#64748b}
+.muted{color:#64748b}.player-card-img{width:100%;max-width:950px;display:block;margin:auto;border:2px solid #0f172a;border-radius:12px}.download-card{display:block;text-align:center;background:#1d4ed8;color:white;text-decoration:none;font-weight:900;border-radius:12px;padding:12px;margin-top:12px}
 .loading{padding:24px;text-align:center;color:#64748b}
 </style>
 </head>
@@ -47,7 +47,7 @@ input,select{border:1px solid #cbd5e1;border-radius:12px;padding:10px 12px;backg
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v3 leader fix</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v4 cards + leaders</span></div>
     </div>
     <nav id="nav"></nav>
   </div>
@@ -81,7 +81,7 @@ let state={page:"Standings",player:null,team:null,stats:"Hitters",pos:"ALL",sear
 const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Records","Postseason"];
 
 /* ---------- CSV + SHEET ---------- */
-function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}&cachebust=${Date.now()}`}
+function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`}
 
 function parseCSV(text){
   const rows=[]; let row=[],cell="",quote=false;
@@ -172,34 +172,42 @@ function parseLeaders(){
   const rows=db.raw[TABS.leaders]||[];
   const leaders={Hitters:{},Pitchers:{},Fielders:{}};
 
-  // Exact uploaded Leaders structure.
-  // Start at row 3 in Sheets = index 2, so first leaders are NOT skipped.
+  // Exact Leaders layout:
+  // Batting:  A category, E player, G stat
+  // Pitching: I category, M player, O stat
+  // Fielding: Q category, U player, W stat
+  // Start at index 2 = Sheet row 3 so Jose Miranda / Logan Gilbert / Bobby Witt Jr are included.
   rows.slice(2).forEach(r=>{
-    // Batting: A category, E player, F #, G stat
-    if(r[0] && r[4]){
-      const cat=r[0];
-      if(!leaders.Hitters[cat])leaders.Hitters[cat]=[];
-      leaders.Hitters[cat].push({player:cleanName(r[4]), value:r[5]||r[6]});
+    const hitCat=r[0], hitPlayer=r[4], hitStat=r[6];
+    if(hitCat && hitPlayer && hitStat){
+      if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat]=[];
+      leaders.Hitters[hitCat].push({player:cleanName(hitPlayer), value:hitStat});
     }
 
-    // Pitching: I category, M player, N #, O stat
-    if(r[8] && r[12]){
-      const cat=r[8];
-      if(!leaders.Pitchers[cat])leaders.Pitchers[cat]=[];
-      leaders.Pitchers[cat].push({player:cleanName(r[12]), value:r[13]||r[14]});
+    const pitCat=r[8], pitPlayer=r[12], pitStat=r[14];
+    if(pitCat && pitPlayer && pitStat){
+      if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat]=[];
+      leaders.Pitchers[pitCat].push({player:cleanName(pitPlayer), value:pitStat});
     }
 
-    // Fielding: Q category, U player, V #, W stat
-    if(r[16] && r[20]){
-      const cat=r[16];
-      if(!leaders.Fielders[cat])leaders.Fielders[cat]=[];
-      leaders.Fielders[cat].push({player:cleanName(r[20]), value:r[21]||r[22]});
+    const fldCat=r[16], fldPlayer=r[20], fldStat=r[22];
+    if(fldCat && fldPlayer && fldStat){
+      if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat]=[];
+      leaders.Fielders[fldCat].push({player:cleanName(fldPlayer), value:fldStat});
     }
   });
 
   db.leaders=leaders;
 }
 
+function extractUrl(v){
+  if(!v)return"";
+  const s=String(v);
+  const md=s.match(/\((https?:\/\/[^)]+)\)/);
+  if(md)return md[1];
+  const raw=s.match(/https?:\/\/\S+/);
+  return raw?raw[0].replace(/[)\]]$/,""):"";
+}
 function parseLeague(){
   const rows=db.raw[TABS.league]||[];
   const out={free:[],inj:[],draft:[],dates:[]};
@@ -209,13 +217,13 @@ function parseLeague(){
     if(r[0]&&r[1])out.dates.push({date:r[0],description:r[1],format:r[2],released:r[3]});
 
     // Free Agents E-H
-    if(r[4])out.free.push({player:cleanName(r[4]),salary:r[7]||r[5],positions:r[6]});
+    if(r[4])out.free.push({player:cleanName(r[4]),cardUrl:extractUrl(r[4]),salary:r[7]||r[5],positions:r[6]});
 
     // Injured List J-P
-    if(r[9])out.inj.push({player:cleanName(r[11]||r[9]),team:r[10],effective:r[12],length:r[13],through:r[14],format:r[15]});
+    if(r[9])out.inj.push({player:cleanName(r[11]||r[9]),cardUrl:extractUrl(r[9]),team:r[10],effective:r[12],length:r[13],through:r[14],format:r[15]});
 
     // Draft R-X
-    if(r[17]||r[21])out.draft.push({round:r[17],pick:r[18],team:r[19],number:r[20],player:cleanName(r[21]||r[22]),format:r[23]});
+    if(r[17]||r[21])out.draft.push({round:r[17],pick:r[18],team:r[19],number:r[20],player:cleanName(r[21]||r[22]),cardUrl:extractUrl(r[22]||r[21]),format:r[23]});
   });
 
   db.league=out;
@@ -236,6 +244,7 @@ function parseRosters(){
           status:r[12],
           team:r[13]||key,
           player:cleanName(r[19]||r[14]),
+          cardUrl:extractUrl(r[14]),
           salary:r[15],
           positions:r[16],
           batter:r[17],
@@ -318,7 +327,16 @@ function generic(rows){
 
 /* ---------- LOOKUPS ---------- */
 function findPlayer(name){
-  return db.players.find(p=>p.player===name) || {player:name,team:"FA",positions:""};
+  const sources = [
+    db.players.find(p=>p.player===name),
+    Object.values(db.rosters).flat().find(p=>p.player===name),
+    db.league.free.find(p=>p.player===name),
+    db.league.inj.find(p=>p.player===name),
+    db.league.draft.find(p=>p.player===name)
+  ].filter(Boolean);
+
+  if(!sources.length) return {player:name,team:"FA",positions:""};
+  return sources.reduce((acc,p)=>({...acc,...p}),{});
 }
 
 function findTeam(tm){
@@ -350,7 +368,9 @@ function renderPlayerPage(p){
     ? ["split","BF","WHIP","HR","BB","K","AVG","OBP","SLG","OPS"].map(k=>({key:k,label:k}))
     : ["split","PA","AB","H","RBI","HR","BB","K","AVG","OBP","SLG","OPS"].map(k=>({key:k,label:k}));
 
+  const cardHtml = p.cardUrl ? `<div class="card"><img class="player-card-img" src="${p.cardUrl}" alt="${p.player} card"><a class="download-card" href="${p.cardUrl}" target="_blank">Open / Download Card</a></div>` : `<div class="card muted">No player card linked yet.</div>`;
   return `${btn("← Back","setPage('Free Agents')","back-btn")}
+    ${cardHtml}
     <div class="card">
       <h1>${p.player}</h1>
       <p class="muted">${stat.positions||""} • Team ${stat.team?btn(stat.team,`openTeam('${stat.team}')`):"FA"} ${stat.salary?`• Salary ${stat.salary}`:""}</p>
@@ -455,7 +475,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","Leaders from Leaders tab. v3 fix: uses row 3 and ignores team/logo URL columns.","📊")+`
+    return head("Leaderboards / Stats","Leaders from Leaders tab. Team/logo URL columns are ignored.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
