@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v14 team stats by TM</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v15 full site fixed leaders + team stats</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -204,43 +204,70 @@ function parseStandings(){
 }
 
 function parseLeaders(){
-  const rows=db.raw[TABS.leaders]||[];
-  const leaders={Hitters:{},Pitchers:{},Fielders:{}};
+  const rows = db.raw[TABS.leaders] || [];
+  const leaders = { Hitters:{}, Pitchers:{}, Fielders:{} };
 
-  // Leaders CSV layout:
-  // row 0 = section titles, row 1 = headers, row 2+ = data.
-  // Hitting: category A/r[0], player E/r[4], stat G/r[6] OR F/r[5]
-  // Pitching: category I/r[8], player M/r[12], stat O/r[14] OR N/r[13]
-  // Fielding: category Q/r[16], player U/r[20], stat W/r[22] OR V/r[21]
+  // EXACT Leaders tab layout:
+  // Row 0 = section titles
+  // Row 1 = headers
+  // Row 2+ = data
+  //
+  // Hitters:
+  // Category = A / r[0]
+  // Player   = E / r[4]
+  // Stat     = G / r[6] for first displayed stat row, otherwise F / r[5] when G is blank
+  //
+  // Pitchers:
+  // Category = I / r[8]
+  // Player   = M / r[12]
+  // Stat     = O / r[14] for first displayed stat row, otherwise N / r[13] when O is blank
+  //
+  // Fielders:
+  // Category = Q / r[16]
+  // Player   = U / r[20]
+  // Stat     = W / r[22] for first displayed stat row, otherwise V / r[21] when W is blank
+
   for(let i=2;i<rows.length;i++){
-    const r=rows[i]||[];
+    const r = rows[i] || [];
 
-    const hitCat=(r[0]||"").trim();
-    const hitPlayer=cleanName(r[4]);
-    const hitStat=((r[6]||"").trim() || (r[5]||"").trim());
+    const hitCat = (r[0] || "").trim();
+    const hitPlayer = cleanName(r[4]);
+    const hitStat = ((r[6] || "").trim() || (r[5] || "").trim());
+
     if(hitCat && hitPlayer && hitStat){
-      if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat]=[];
-      leaders.Hitters[hitCat].push({player:hitPlayer,value:hitStat});
+      if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat] = [];
+      leaders.Hitters[hitCat].push({
+        player: hitPlayer,
+        value: hitStat
+      });
     }
 
-    const pitCat=(r[8]||"").trim();
-    const pitPlayer=cleanName(r[12]);
-    const pitStat=((r[14]||"").trim() || (r[13]||"").trim());
+    const pitCat = (r[8] || "").trim();
+    const pitPlayer = cleanName(r[12]);
+    const pitStat = ((r[14] || "").trim() || (r[13] || "").trim());
+
     if(pitCat && pitPlayer && pitStat){
-      if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat]=[];
-      leaders.Pitchers[pitCat].push({player:pitPlayer,value:pitStat});
+      if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat] = [];
+      leaders.Pitchers[pitCat].push({
+        player: pitPlayer,
+        value: pitStat
+      });
     }
 
-    const fldCat=(r[16]||"").trim();
-    const fldPlayer=cleanName(r[20]);
-    const fldStat=((r[22]||"").trim() || (r[21]||"").trim());
+    const fldCat = (r[16] || "").trim();
+    const fldPlayer = cleanName(r[20]);
+    const fldStat = ((r[22] || "").trim() || (r[21] || "").trim());
+
     if(fldCat && fldPlayer && fldStat){
-      if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat]=[];
-      leaders.Fielders[fldCat].push({player:fldPlayer,value:fldStat});
+      if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat] = [];
+      leaders.Fielders[fldCat].push({
+        player: fldPlayer,
+        value: fldStat
+      });
     }
   }
 
-  db.leaders=leaders;
+  db.leaders = leaders;
 }
 
 function extractUrl(v){
@@ -428,105 +455,100 @@ function parseSplitTab(rows){
 }
 
 function parseTeamStats(){
-  const rows=db.raw[TABS.teams]||[];
+  const rows = db.raw[TABS.teams] || [];
 
-  // Safer parser:
-  // Instead of trusting display row position only, build each section and match by TM.
-  // This prevents OVR from accidentally showing another team's totals.
+  // EXACT Teams tab layout:
+  // Pitching section:
+  // Header row = CSV row index 1
+  // Data rows  = CSV row indexes 2 through 11
+  db.teamStats = rows.slice(2,12).map(r => ({
+    logo: r[0],
+    team: String(r[1] || "").trim().toUpperCase(),
+    W: r[2],
+    L: r[3],
+    SV: r[4],
+    HD: r[5],
+    BS: r[6],
+    IP: r[7],
+    ERA: r[8],
+    WHIP: r[9],
+    HR: r[10],
+    "3B": r[11],
+    "2B": r[12],
+    "1B": r[13],
+    BB: r[14],
+    K: r[15],
+    HBP: r[16],
+    IBB: r[17],
+    DP: r[18],
+    BPHR: r[19],
+    BPFO: r[20],
+    BP1B: r[21],
+    BPLO: r[22],
+    LOB: r[23],
+    WP: r[24],
+    BK: r[25],
+    R: r[26],
+    ER: r[27],
+    "HR/9": r[28],
+    "BB/9": r[29],
+    "SO/9": r[30],
+    "SO/BB": r[31]
+  })).filter(t => t.team);
 
-  function rowIsTeam(r){
-    return r && r[1] && /^[A-Z]{2,4}$/i.test(String(r[1]).trim());
-  }
+  // Batting section:
+  // Header row = CSV row index 23
+  // Data rows  = CSV row indexes 24 through 33
+  db.teamBattingStats = rows.slice(24,34).map(r => ({
+    logo: r[0],
+    team: String(r[1] || "").trim().toUpperCase(),
+    PA: r[2],
+    AB: r[3],
+    H: r[4],
+    RBI: r[5],
+    HR: r[6],
+    "3B": r[7],
+    "2B": r[8],
+    "1B": r[9],
+    BB: r[10],
+    K: r[11],
+    AVG: r[12],
+    OBP: r[13],
+    SLG: r[14],
+    OPS: r[15],
+    HBP: r[16],
+    SAC: r[17],
+    IBB: r[18],
+    DP: r[19],
+    BPHR: r[20],
+    BPFO: r[21],
+    BP1B: r[22],
+    BPLO: r[23],
+    LOB: r[24],
+    R: r[25],
+    SB: r[26],
+    CS: r[27]
+  })).filter(t => t.team);
 
-  // Pitching section: starts near top. Header row has Team/TM/W/L.
-  const pStart=rows.findIndex(r=>r[0]==="Team" && r[1]==="TM" && r[2]==="W" && r[7]==="IP");
-  db.teamStats=pStart>=0 ? rows.slice(pStart+1).filter(rowIsTeam).map(r=>({
-    logo:r[0],
-    team:String(r[1]).trim().toUpperCase(),
-    W:r[2],
-    L:r[3],
-    SV:r[4],
-    HD:r[5],
-    BS:r[6],
-    IP:r[7],
-    ERA:r[8],
-    WHIP:r[9],
-    HR:r[10],
-    "3B":r[11],
-    "2B":r[12],
-    "1B":r[13],
-    BB:r[14],
-    K:r[15],
-    HBP:r[16],
-    IBB:r[17],
-    DP:r[18],
-    BPHR:r[19],
-    BPFO:r[20],
-    BP1B:r[21],
-    BPLO:r[22],
-    LOB:r[23],
-    WP:r[24],
-    BK:r[25],
-    R:r[26],
-    ER:r[27],
-    "HR/9":r[28],
-    "BB/9":r[29],
-    "SO/9":r[30],
-    "SO/BB":r[31]
-  })) : [];
-
-  // Batting section: header row has Team/TM/PA/AB.
-  const bStart=rows.findIndex(r=>r[0]==="Team" && r[1]==="TM" && r[2]==="PA" && r[3]==="AB");
-  db.teamBattingStats=bStart>=0 ? rows.slice(bStart+1).filter(rowIsTeam).map(r=>({
-    logo:r[0],
-    team:String(r[1]).trim().toUpperCase(),
-    PA:r[2],
-    AB:r[3],
-    H:r[4],
-    RBI:r[5],
-    HR:r[6],
-    "3B":r[7],
-    "2B":r[8],
-    "1B":r[9],
-    BB:r[10],
-    K:r[11],
-    AVG:r[12],
-    OBP:r[13],
-    SLG:r[14],
-    OPS:r[15],
-    HBP:r[16],
-    SAC:r[17],
-    IBB:r[18],
-    DP:r[19],
-    BPHR:r[20],
-    BPFO:r[21],
-    BP1B:r[22],
-    BPLO:r[23],
-    LOB:r[24],
-    R:r[25],
-    SB:r[26],
-    CS:r[27]
-  })) : [];
-
-  // Fielding section: header row has Team/TM/XCH.
-  const fStart=rows.findIndex(r=>r[0]==="Team" && r[1]==="TM" && r[2]==="XCH");
-  db.teamFieldingStats=fStart>=0 ? rows.slice(fStart+1).filter(rowIsTeam).map(r=>({
-    logo:r[0],
-    team:String(r[1]).trim().toUpperCase(),
-    XCH:r[2],
-    XHit:r[3],
-    Err:r[4],
-    PB:r[5],
-    OT:r[6],
-    SBa:r[7],
-    CSc:r[8],
-    "CS%":r[9],
-    "FLD%":r[10],
-    "wF%":r[11],
-    UER:r[12]
-  })) : [];
+  // Fielding section:
+  // Header row = CSV row index 44
+  // Data rows  = CSV row indexes 45 through 54
+  db.teamFieldingStats = rows.slice(45,55).map(r => ({
+    logo: r[0],
+    team: String(r[1] || "").trim().toUpperCase(),
+    XCH: r[2],
+    XHit: r[3],
+    Err: r[4],
+    PB: r[5],
+    OT: r[6],
+    SBa: r[7],
+    CSc: r[8],
+    "CS%": r[9],
+    "FLD%": r[10],
+    "wF%": r[11],
+    UER: r[12]
+  })).filter(t => t.team);
 }
-
 
 function toObjects(rows,idx){
   const headers=rows[idx]||[];
@@ -807,7 +829,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","v14: Team hitting, pitching, and fielding totals matched by TM code.","📊")+`
+    return head("Leaderboards / Stats","Leaderboards copied from the Leaders tab and showing top 5 per category.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
