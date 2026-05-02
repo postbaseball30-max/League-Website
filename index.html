@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v10 splits + team stats</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v11 team stats + managers</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -93,11 +93,11 @@ const TABS={
 
 const TEAM_TABS=["CWY","LBS","OVR","OWL","PIT","Pit","RHN","SML","TK","TOR","UCH"];
 
-let db={raw:{},standings:[],leaders:{Hitters:{},Pitchers:{},Fielders:{}},league:{free:[],inj:[],draft:[],dates:[]},rosters:{},players:[],batters:[],pitchers:[],batSplits:[],pitSplits:[],records:[],schedule:[],fullSeason:[],postseason:[],teamStats:[]};
+let db={raw:{},standings:[],leaders:{Hitters:{},Pitchers:{},Fielders:{}},league:{free:[],inj:[],draft:[],dates:[]},rosters:{},players:[],batters:[],pitchers:[],batSplits:[],pitSplits:[],records:[],schedule:[],fullSeason:[],postseason:[],teamStats:[],teamBattingStats:[],managers:[]};
 
-let state={page:"Standings",player:null,team:null,stats:"Hitters",pos:"ALL",search:"",records:"Game / Season Records",career:"Hitters",schedule:"Current Week"};
+let state={page:"Standings",player:null,team:null,manager:null,stats:"Hitters",pos:"ALL",search:"",records:"Game / Season Records",career:"Hitters",schedule:"Current Week"};
 
-const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Records","Postseason","Debug"];
+const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Managers","Records","Postseason","Debug"];
 
 function applyTheme(){
   const mode=localStorage.getItem("opsTheme")||"light";
@@ -169,6 +169,7 @@ function normalize(){
   parseSplits();
   parseGenericTabs();
   parseTeamStats();
+  parseManagers();
 }
 
 function parseStandings(){
@@ -428,8 +429,9 @@ function parseSplitTab(rows){
 
 function parseTeamStats(){
   const rows=db.raw[TABS.teams]||[];
-  // Teams CSV row 1 headers, row 2+ data
-  db.teamStats=rows.slice(2).filter(r=>r[1]).map(r=>({
+
+  // Pitching section: row 1 headers, row 2-11 data
+  db.teamStats=rows.slice(2,12).filter(r=>r[1]).map(r=>({
     logo:r[0],
     team:r[1],
     W:r[2],
@@ -463,7 +465,42 @@ function parseTeamStats(){
     "SO/9":r[30],
     "SO/BB":r[31]
   }));
+
+  // Batting section: row 23 headers, row 24+ data in uploaded CSV
+  // Find the header row where column A = Team and B = TM and C = PA
+  const bIdx=rows.findIndex(r=>r[0]==="Team" && r[1]==="TM" && r[2]==="PA");
+  db.teamBattingStats=bIdx>=0 ? rows.slice(bIdx+1).filter(r=>r[1]).map(r=>({
+    logo:r[0],
+    team:r[1],
+    PA:r[2],
+    AB:r[3],
+    H:r[4],
+    RBI:r[5],
+    HR:r[6],
+    "3B":r[7],
+    "2B":r[8],
+    "1B":r[9],
+    BB:r[10],
+    K:r[11],
+    AVG:r[12],
+    OBP:r[13],
+    SLG:r[14],
+    OPS:r[15],
+    HBP:r[16],
+    SAC:r[17],
+    IBB:r[18],
+    DP:r[19],
+    BPHR:r[20],
+    BPFO:r[21],
+    BP1B:r[22],
+    BPLO:r[23],
+    LOB:r[24],
+    R:r[25],
+    SB:r[26],
+    CS:r[27]
+  })) : [];
 }
+
 
 function toObjects(rows,idx){
   const headers=rows[idx]||[];
@@ -472,6 +509,36 @@ function toObjects(rows,idx){
     headers.forEach((h,i)=>{if(h)o[h]=r[i]||""});
     return o;
   });
+}
+
+function parseManagers(){
+  const managers=[];
+  TEAM_TABS.forEach(tab=>{
+    const rows=db.raw[tab]||[];
+    const key=String(tab).toUpperCase();
+    const standing=db.standings.find(t=>String(t.tm).toUpperCase()===key);
+    let managerText="";
+
+    rows.forEach(r=>{
+      if(String(r[8]||"").trim()==="Managers" && r[9]) managerText=r[9];
+      if(String(r[0]||"").trim()==="GM" && r[1]) managerText=managerText || r[1];
+    });
+
+    if(managerText){
+      managers.push({
+        manager:managerText,
+        team:key,
+        teamName:standing ? standing.team : key,
+        W:standing ? standing.w : "",
+        L:standing ? standing.l : "",
+        PCT:standing ? standing.pct : "",
+        awards:[]
+      });
+    }
+  });
+
+  // Deduplicate
+  db.managers=managers.filter((m,i,a)=>a.findIndex(x=>x.manager===m.manager && x.team===m.team)===i);
 }
 
 function parseGenericTabs(){
@@ -507,12 +574,12 @@ function findTeam(tm){
 }
 
 /* ---------- NAV ---------- */
-function setPage(p){state.page=p;state.player=null;state.team=null;render()}
-function openPlayer(name){state.player=findPlayer(name);state.team=null;render()}
-function openTeam(tm){state.team=findTeam(tm);state.player=null;render()}
+function setPage(p){state.page=p;state.player=null;state.team=null;state.manager=null;render()}
+function openPlayer(name){state.player=findPlayer(name);state.team=null;state.manager=null;render()}
+function openTeam(tm){state.team=findTeam(tm);state.player=null;state.manager=null;render()}
 
 function renderNav(){
-  document.getElementById("nav").innerHTML=tabs.map(t=>`<button class="nav-btn ${state.page===t&&!state.player&&!state.team?"active":""}" onclick="setPage('${t}')">${t}</button>`).join("");
+  document.getElementById("nav").innerHTML=tabs.map(t=>`<button class="nav-btn ${state.page===t&&!state.player&&!state.team&&!state.manager?"active":""}" onclick="setPage('${t}')">${t}</button>`).join("");
 }
 
 /* ---------- PAGES ---------- */
@@ -555,12 +622,16 @@ function renderPlayerPage(p){
       <h2>Season Stats</h2>
       ${table(seasonCols,[stat])}
     </div>
-    <div class="card"><h2>${isPitcher ? "Pitching Splits" : "Batting Splits"}</h2>${splits.length ? table(splitCols,splits) : `<p class="muted">No split rows found for this player yet.</p>`}</div>`;
+    <div class="card"><h2>${isPitcher ? "Pitching Splits" : "Batting Splits"}</h2>${splits.length ? table(splitCols,splits) : `<p class="muted">No split rows found for this player yet.</p>`}</div>
+    <div class="card"><h2>Awards</h2><p class="muted">Player awards will show here once they are published.</p></div>`;
 }
 
 function renderTeamPage(t){
   const roster=db.rosters[String(t.tm).toUpperCase()]||[];
   const logo=t.logo || ((db.teamMeta&&db.teamMeta[String(t.tm).toUpperCase()]&&db.teamMeta[String(t.tm).toUpperCase()].logoUrl)||"");
+  const hitting=db.teamBattingStats.filter(x=>String(x.team).toUpperCase()===String(t.tm).toUpperCase());
+  const pitching=db.teamStats.filter(x=>String(x.team).toUpperCase()===String(t.tm).toUpperCase());
+
   return `${btn("← Back","setPage('Teams')","back-btn")}
     <div class="card team-hero"><div><h1>${t.team}</h1><p class="muted">${t.tm} • ${t.w}-${t.l} • ${t.pct}</p></div>${logo?`<img class="team-logo" src="${logo}" alt="${t.team} logo">`:""}</div>
     <div class="grid grid-4">
@@ -569,11 +640,20 @@ function renderTeamPage(t){
       <div class="stat-box"><div class="stat-label">GB</div><div class="stat-value">${t.gb||"-"}</div></div>
       <div class="stat-box"><div class="stat-label">Streak</div><div class="stat-value">${t.streak||"-"}</div></div>
     </div>
+
+    <h2>Team Hitting Totals</h2>
+    ${table([
+      {key:"PA",label:"PA"},{key:"AB",label:"AB"},{key:"H",label:"H"},{key:"RBI",label:"RBI"},{key:"HR",label:"HR"},{key:"3B",label:"3B"},{key:"2B",label:"2B"},{key:"1B",label:"1B"},
+      {key:"BB",label:"BB"},{key:"K",label:"K"},{key:"AVG",label:"AVG"},{key:"OBP",label:"OBP"},{key:"SLG",label:"SLG"},{key:"OPS",label:"OPS"},
+      {key:"R",label:"R"},{key:"SB",label:"SB"},{key:"CS",label:"CS"}
+    ], hitting)}
+
     <h2>Team Pitching Totals</h2>
     ${table([
       {key:"W",label:"W"},{key:"L",label:"L"},{key:"SV",label:"SV"},{key:"HD",label:"HD"},{key:"BS",label:"BS"},{key:"IP",label:"IP"},{key:"ERA",label:"ERA"},{key:"WHIP",label:"WHIP"},
       {key:"HR",label:"HR"},{key:"BB",label:"BB"},{key:"K",label:"K"},{key:"R",label:"R"},{key:"ER",label:"ER"},{key:"HR/9",label:"HR/9"},{key:"BB/9",label:"BB/9"},{key:"SO/9",label:"SO/9"},{key:"SO/BB",label:"SO/BB"}
-    ], db.teamStats.filter(x=>String(x.team).toUpperCase()===String(t.tm).toUpperCase()))}
+    ], pitching)}
+
     <h2>Roster</h2>
     ${table([
       {key:"player",label:"Player",render:r=>btn(r.player,`openPlayer('${String(r.player).replace(/'/g,"\\'")}')`)},
@@ -585,9 +665,35 @@ function renderTeamPage(t){
     ],roster)}`;
 }
 
+function openManager(name){
+  state.manager=db.managers.find(m=>m.manager===name);
+  state.player=null;
+  state.team=null;
+  render();
+}
+
+function renderManagerPage(m){
+  return `${btn("← Back","setPage('Managers')","back-btn")}
+    <div class="card">
+      <h1>${m.manager}</h1>
+      <p class="muted">Team ${btn(m.team,`openTeam('${m.team}')`)} • ${m.teamName}</p>
+    </div>
+    <div class="grid grid-3">
+      <div class="stat-box"><div class="stat-label">Wins</div><div class="stat-value">${m.W||"-"}</div></div>
+      <div class="stat-box"><div class="stat-label">Losses</div><div class="stat-value">${m.L||"-"}</div></div>
+      <div class="stat-box"><div class="stat-label">Win %</div><div class="stat-value">${m.PCT||"-"}</div></div>
+    </div>
+    <div class="card">
+      <h2>Awards</h2>
+      ${m.awards && m.awards.length ? table([{key:"award",label:"Award"},{key:"season",label:"Season"}],m.awards) : `<p class="muted">Manager awards will show here once they are published.</p>`}
+    </div>`;
+}
+
+
 function renderPage(){
   if(state.player)return renderPlayerPage(state.player);
   if(state.team)return renderTeamPage(state.team);
+  if(state.manager)return renderManagerPage(state.manager);
 
   if(state.page==="Standings"){
     return head("Standings","Live standings from Full Standings tab.","🏆")+table([
@@ -659,7 +765,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","v10: Player stats, splits, team totals, and fixed leader parsing.","📊")+`
+    return head("Leaderboards / Stats","v11: Player stats, splits, team hitting/pitching totals, and managers.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
@@ -667,6 +773,18 @@ function renderPage(){
           {key:"player",label:"Player",render:r=>btn(r.player,`openPlayer('${String(r.player).replace(/'/g,"\\'")}')`)},
           {key:"value",label:"Stat"}
         ],rows.slice(0,5))}</div>`).join("")}</div>`;
+  }
+
+  if(state.page==="Managers"){
+    return head("Managers","Manager records pulled from team sheets and standings.","🧢")+
+      table([
+        {key:"manager",label:"Manager",render:r=>btn(r.manager,`openManager('${String(r.manager).replace(/'/g,"\\'")}')`)},
+        {key:"team",label:"Team",render:r=>btn(r.team,`openTeam('${r.team}')`)},
+        {key:"teamName",label:"Team Name"},
+        {key:"W",label:"W"},
+        {key:"L",label:"L"},
+        {key:"PCT",label:"PCT"}
+      ], db.managers);
   }
 
   if(state.page==="Records"){
