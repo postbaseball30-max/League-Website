@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v8 player stats + fixed leaders</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v9 splits + fixed leaders</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -112,7 +112,7 @@ function toggleDarkMode(){
 
 
 /* ---------- CSV + SHEET ---------- */
-function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`}
+function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}&cachebust=${Date.now()}`}
 
 function parseCSV(text){
   const rows=[]; let row=[],cell="",quote=false;
@@ -417,15 +417,39 @@ function parseSplits(){
 }
 
 function parseSplitTab(rows){
+  // Batting Splits / Pitcher Splits layout:
+  // Row 0 = formulas/title
+  // Row 1 = headers
+  // Row 2+ = data
   const idx=rows.findIndex(r=>r.includes("name")&&r.includes("Split"));
   if(idx<0)return[];
+
   return toObjects(rows,idx).map(r=>({
     player:cleanName(r.name||r.Player),
-    team:r.TM,
-    role:r.Role,
-    split:r.Split,
-    PA:r.PA,AB:r.AB,H:r.H,RBI:r.RBI,HR:r.HR,BB:r.BB,K:r.K,AVG:r.AVG,OBP:r.OBP,SLG:r.SLG,OPS:r.OPS,
-    BF:r.BF,WHIP:r.WHIP,ERA:r.ERA
+    team:r.TM||r.Team,
+    role:r.Role||"",
+    split:r.Split||"",
+    PA:r.PA,
+    AB:r.AB,
+    H:r.H,
+    RBI:r.RBI,
+    HR:r.HR,
+    "3B":r["3B"],
+    "2B":r["2B"],
+    "1B":r["1B"],
+    BB:r.BB,
+    K:r.K,
+    AVG:r.AVG,
+    OBP:r.OBP,
+    SLG:r.SLG,
+    OPS:r.OPS,
+    BF:r.BF,
+    WHIP:r.WHIP,
+    ERA:r.ERA,
+    "HR/9":r["HR/9"],
+    "BB/9":r["BB/9"],
+    "SO/9":r["SO/9"],
+    "SO/BB":r["SO/BB"]
   })).filter(r=>r.player);
 }
 
@@ -552,7 +576,7 @@ function renderPlayerPage(p){
       <h2>Season Stats</h2>
       ${table(seasonCols,[stat])}
     </div>
-    <div class="card"><h2>Splits</h2>${table(splitCols,splits)}</div>`;
+    <div class="card"><h2>${isPitcher ? "Pitching Splits" : "Batting Splits"}</h2>${splits.length ? table(splitCols,splits) : `<p class="muted">No split rows found for this player yet.</p>`}</div>`;
 }
 
 function renderTeamPage(t){
@@ -651,7 +675,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","v7: Leaders parsed directly from row 3; team/logo URL columns ignored.","📊")+`
+    return head("Leaderboards / Stats","v9: Leaders fixed + player season stats + batting/pitching splits.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
