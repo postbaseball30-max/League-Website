@@ -47,7 +47,7 @@ input,select{border:1px solid #cbd5e1;border-radius:12px;padding:10px 12px;backg
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website</div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v3 leader fix</span></div>
     </div>
     <nav id="nav"></nav>
   </div>
@@ -81,7 +81,7 @@ let state={page:"Standings",player:null,team:null,stats:"Hitters",pos:"ALL",sear
 const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Records","Postseason"];
 
 /* ---------- CSV + SHEET ---------- */
-function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`}
+function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}&cachebust=${Date.now()}`}
 
 function parseCSV(text){
   const rows=[]; let row=[],cell="",quote=false;
@@ -455,7 +455,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","Leaders from Leaders tab. Team/logo URL columns are ignored.","📊")+`
+    return head("Leaderboards / Stats","Leaders from Leaders tab. v3 fix: uses row 3 and ignores team/logo URL columns.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
