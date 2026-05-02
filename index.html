@@ -40,6 +40,24 @@ input,select{border:1px solid #cbd5e1;border-radius:12px;padding:10px 12px;backg
 .back-btn{background:#fff;border:1px solid #cbd5e1;color:#334155;margin-bottom:16px}
 .muted{color:#64748b}.player-card-img{width:100%;max-width:950px;display:block;margin:auto;border:2px solid #0f172a;border-radius:12px}.download-card{display:block;text-align:center;background:#1d4ed8;color:white;text-decoration:none;font-weight:900;border-radius:12px;padding:12px;margin-top:12px}
 .loading{padding:24px;text-align:center;color:#64748b}
+
+body.dark{background:#020617;color:#e5e7eb}
+body.dark header{background:#0f172a;border-bottom-color:#1e293b}
+body.dark .card,body.dark .stat-box,body.dark .table-wrap,body.dark table{background:#0f172a;border-color:#1e293b;color:#e5e7eb}
+body.dark th{background:#1e293b;color:#e5e7eb}
+body.dark td{border-top-color:#1e293b;color:#e5e7eb}
+body.dark .nav-btn{background:#1e293b;color:#cbd5e1}
+body.dark .nav-btn.active,body.dark .pill-btn.active{background:#2563eb;color:white}
+body.dark input,body.dark select{background:#0f172a;color:#e5e7eb;border-color:#334155}
+body.dark .back-btn{background:#0f172a;color:#e5e7eb;border-color:#334155}
+body.dark .muted,.dark .subtitle,.dark .stat-label{color:#94a3b8}
+.theme-toggle{border:1px solid #cbd5e1;background:#fff;color:#0f172a;border-radius:12px;padding:10px 14px;font-weight:900;cursor:pointer}
+body.dark .theme-toggle{background:#1e293b;color:#e5e7eb;border-color:#334155}
+.team-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+.team-logo{width:110px;height:110px;object-fit:contain;border-radius:16px;background:white;border:1px solid #e2e8f0;padding:8px}
+body.dark .team-logo{background:#f8fafc;border-color:#334155}
+@media(max-width:700px){.team-hero{flex-direction:column}.team-logo{width:90px;height:90px}}
+
 </style>
 </head>
 <body>
@@ -47,9 +65,9 @@ input,select{border:1px solid #cbd5e1;border-radius:12px;padding:10px 12px;backg
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v4 cards + leaders</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v6 dark mode + team logos</span></div>
     </div>
-    <nav id="nav"></nav>
+    <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
 </header>
 
@@ -79,6 +97,19 @@ let db={raw:{},standings:[],leaders:{Hitters:{},Pitchers:{},Fielders:{}},league:
 let state={page:"Standings",player:null,team:null,stats:"Hitters",pos:"ALL",search:"",records:"Game / Season Records",career:"Hitters",schedule:"Current Week"};
 
 const tabs=["Standings","Teams","Schedule","Free Agents","Leaderboards / Stats","Records","Postseason"];
+
+function applyTheme(){
+  const mode=localStorage.getItem("opsTheme")||"light";
+  document.body.classList.toggle("dark",mode==="dark");
+  const btn=document.querySelector(".theme-toggle");
+  if(btn)btn.textContent=mode==="dark"?"☀️ Light Mode":"🌙 Dark Mode";
+}
+function toggleDarkMode(){
+  const next=document.body.classList.contains("dark")?"light":"dark";
+  localStorage.setItem("opsTheme",next);
+  applyTheme();
+}
+
 
 /* ---------- CSV + SHEET ---------- */
 function sheetUrl(tab){return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`}
@@ -173,24 +204,24 @@ function parseLeaders(){
   const leaders={Hitters:{},Pitchers:{},Fielders:{}};
 
   // Exact Leaders layout:
-  // Batting:  A category, E player, G stat
-  // Pitching: I category, M player, O stat
-  // Fielding: Q category, U player, W stat
-  // Start at index 2 = Sheet row 3 so Jose Miranda / Logan Gilbert / Bobby Witt Jr are included.
+  // Batting:  A category, E player, G stat for row 3, F stat for rows below
+  // Pitching: I category, M player, O stat for row 3, N stat for rows below
+  // Fielding: Q category, U player, W stat for row 3, V stat for rows below
+  // This keeps Jose Miranda / Logan Gilbert / Bobby Witt Jr AND the rest of the top 5.
   rows.slice(2).forEach(r=>{
-    const hitCat=r[0], hitPlayer=r[4], hitStat=r[6];
+    const hitCat=r[0], hitPlayer=r[4], hitStat=r[6]||r[5];
     if(hitCat && hitPlayer && hitStat){
       if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat]=[];
       leaders.Hitters[hitCat].push({player:cleanName(hitPlayer), value:hitStat});
     }
 
-    const pitCat=r[8], pitPlayer=r[12], pitStat=r[14];
+    const pitCat=r[8], pitPlayer=r[12], pitStat=r[14]||r[13];
     if(pitCat && pitPlayer && pitStat){
       if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat]=[];
       leaders.Pitchers[pitCat].push({player:cleanName(pitPlayer), value:pitStat});
     }
 
-    const fldCat=r[16], fldPlayer=r[20], fldStat=r[22];
+    const fldCat=r[16], fldPlayer=r[20], fldStat=r[22]||r[21];
     if(fldCat && fldPlayer && fldStat){
       if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat]=[];
       leaders.Fielders[fldCat].push({player:cleanName(fldPlayer), value:fldStat});
@@ -231,10 +262,18 @@ function parseLeague(){
 
 function parseRosters(){
   db.rosters={};
+  db.teamMeta={};
   TEAM_TABS.forEach(tab=>{
     const rows=db.raw[tab]||[];
     const key=String(tab).toUpperCase();
     const roster=[];
+    let logoUrl="";
+
+    rows.forEach(r=>{
+      if(String(r[0]||"").trim().toLowerCase()==="logo url") logoUrl=r[1]||"";
+    });
+
+    db.teamMeta[key]={logoUrl};
 
     // Exact team tab structure:
     // ROSTER starts at M/T-ish: row 1 index 1 has Status, Team, Player, Salary, Positions, Batter?, Pitcher?, Name
@@ -382,8 +421,9 @@ function renderPlayerPage(p){
 
 function renderTeamPage(t){
   const roster=db.rosters[String(t.tm).toUpperCase()]||[];
+  const logo=(db.teamMeta&&db.teamMeta[String(t.tm).toUpperCase()]&&db.teamMeta[String(t.tm).toUpperCase()].logoUrl)||"";
   return `${btn("← Back","setPage('Teams')","back-btn")}
-    <div class="card"><h1>${t.team}</h1><p class="muted">${t.tm} • ${t.w}-${t.l} • ${t.pct}</p></div>
+    <div class="card team-hero"><div><h1>${t.team}</h1><p class="muted">${t.tm} • ${t.w}-${t.l} • ${t.pct}</p></div>${logo?`<img class="team-logo" src="${logo}" alt="${t.team} logo">`:""}</div>
     <div class="grid grid-4">
       <div class="stat-box"><div class="stat-label">Wins</div><div class="stat-value">${t.w||"-"}</div></div>
       <div class="stat-box"><div class="stat-label">Losses</div><div class="stat-value">${t.l||"-"}</div></div>
@@ -482,7 +522,7 @@ function renderPage(){
           {key:"rank",label:"#",render:(r,i)=>i+1},
           {key:"player",label:"Player",render:r=>btn(r.player,`openPlayer('${String(r.player).replace(/'/g,"\\'")}')`)},
           {key:"value",label:"Stat"}
-        ],rows.slice(0,10))}</div>`).join("")}</div>`;
+        ],rows.slice(0,5))}</div>`).join("")}</div>`;
   }
 
   if(state.page==="Records"){
@@ -526,7 +566,7 @@ function render(){
   document.getElementById("app").innerHTML=renderPage();
 }
 
-async function init(){
+async function init(){applyTheme();
   renderNav();
   document.getElementById("app").innerHTML=`<div class="loading">Loading league data from Google Sheets...</div>`;
   const allTabs=[...Object.values(TABS),...TEAM_TABS];
