@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v12 hitting pitching fielding stats</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v13 fixed team stat rows</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -430,7 +430,11 @@ function parseSplitTab(rows){
 function parseTeamStats(){
   const rows=db.raw[TABS.teams]||[];
 
-  // Pitching section: header row 1, data rows 2-11
+  // Teams.csv exact layout:
+  // CSV index 1 = pitching headers, index 2-11 = pitching team rows
+  // CSV index 23 = batting headers, index 24-33 = batting team rows
+  // CSV index 44 = fielding headers, index 45-54 = fielding team rows
+
   db.teamStats=rows.slice(2,12).filter(r=>r[1]).map(r=>({
     logo:r[0],
     team:r[1],
@@ -466,9 +470,7 @@ function parseTeamStats(){
     "SO/BB":r[31]
   }));
 
-  // Batting section: find row where A=Team, B=TM, C=PA
-  const bIdx=rows.findIndex(r=>r[0]==="Team" && r[1]==="TM" && r[2]==="PA");
-  db.teamBattingStats=bIdx>=0 ? rows.slice(bIdx+1).filter(r=>r[1]).map(r=>({
+  db.teamBattingStats=rows.slice(24,34).filter(r=>r[1]).map(r=>({
     logo:r[0],
     team:r[1],
     PA:r[2],
@@ -497,11 +499,9 @@ function parseTeamStats(){
     R:r[25],
     SB:r[26],
     CS:r[27]
-  })).filter(r=>r.team && !String(r.team).startsWith("http")) : [];
+  }));
 
-  // Fielding section: find row where A=Team, B=TM, C=XCH
-  const fIdx=rows.findIndex(r=>r[0]==="Team" && r[1]==="TM" && r[2]==="XCH");
-  db.teamFieldingStats=fIdx>=0 ? rows.slice(fIdx+1).filter(r=>r[1]).map(r=>({
+  db.teamFieldingStats=rows.slice(45,55).filter(r=>r[1]).map(r=>({
     logo:r[0],
     team:r[1],
     XCH:r[2],
@@ -515,7 +515,7 @@ function parseTeamStats(){
     "FLD%":r[10],
     "wF%":r[11],
     UER:r[12]
-  })).filter(r=>r.team && !String(r.team).startsWith("http")) : [];
+  }));
 }
 
 
@@ -798,7 +798,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","v12: Team hitting, pitching, fielding totals plus managers.","📊")+`
+    return head("Leaderboards / Stats","v13: Team pitching, hitting, and fielding totals fixed from exact Teams CSV rows.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
