@@ -65,7 +65,7 @@ body.dark .team-logo{background:#f8fafc;border-color:#334155}
   <div class="header-inner">
     <div>
       <div class="brand-small">The Bowler's Eye</div>
-      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v16 exact sheet rows</span></div>
+      <div class="brand-title">OPS League Website <span style="font-size:12px;color:#16a34a;">v17 full exact team stats</span></div>
     </div>
     <button class="theme-toggle" onclick="toggleDarkMode()">🌙 Dark Mode</button><nav id="nav"></nav>
   </div>
@@ -207,18 +207,16 @@ function parseLeaders(){
   const rows = db.raw[TABS.leaders] || [];
   const leaders = { Hitters:{}, Pitchers:{}, Fielders:{} };
 
-  // Copy exactly what appears in Leaders tab:
-  // Batting table:
-  // A = Cat, E = Player, F = #, G = Stat
-  // Pitching table:
-  // I = Cat, M = Player, N = #, O = Stat
-  // Fielding table:
-  // Q = Cat, U = Player, V = #, W = Stat
+  // Leaders tab layout:
+  // Row 0 = section titles
+  // Row 1 = headers
+  // Row 2+ = data
   //
-  // The first row in each category has the value duplicated in the Stat column.
-  // The next rows have the value in the # column. So use Stat if present, otherwise #.
+  // Hitters:  Cat=A/r[0], Player=E/r[4], Stat=G/r[6] or #=F/r[5]
+  // Pitchers: Cat=I/r[8], Player=M/r[12], Stat=O/r[14] or #=N/r[13]
+  // Fielders: Cat=Q/r[16], Player=U/r[20], Stat=W/r[22] or #=V/r[21]
 
-  for(let i = 2; i < rows.length; i++){
+  for(let i=2;i<rows.length;i++){
     const r = rows[i] || [];
 
     const hitCat = (r[0] || "").trim();
@@ -226,7 +224,7 @@ function parseLeaders(){
     const hitValue = ((r[6] || "").trim() || (r[5] || "").trim());
     if(hitCat && hitPlayer && hitValue){
       if(!leaders.Hitters[hitCat]) leaders.Hitters[hitCat] = [];
-      leaders.Hitters[hitCat].push({ player: hitPlayer, value: hitValue });
+      leaders.Hitters[hitCat].push({player:hitPlayer, value:hitValue});
     }
 
     const pitCat = (r[8] || "").trim();
@@ -234,7 +232,7 @@ function parseLeaders(){
     const pitValue = ((r[14] || "").trim() || (r[13] || "").trim());
     if(pitCat && pitPlayer && pitValue){
       if(!leaders.Pitchers[pitCat]) leaders.Pitchers[pitCat] = [];
-      leaders.Pitchers[pitCat].push({ player: pitPlayer, value: pitValue });
+      leaders.Pitchers[pitCat].push({player:pitPlayer, value:pitValue});
     }
 
     const fldCat = (r[16] || "").trim();
@@ -242,7 +240,7 @@ function parseLeaders(){
     const fldValue = ((r[22] || "").trim() || (r[21] || "").trim());
     if(fldCat && fldPlayer && fldValue){
       if(!leaders.Fielders[fldCat]) leaders.Fielders[fldCat] = [];
-      leaders.Fielders[fldCat].push({ player: fldPlayer, value: fldValue });
+      leaders.Fielders[fldCat].push({player:fldPlayer, value:fldValue});
     }
   }
 
@@ -436,22 +434,52 @@ function parseSplitTab(rows){
 function parseTeamStats(){
   const rows = db.raw[TABS.teams] || [];
 
-  // EXACT GOOGLE SHEET ROWS:
-  // Sheet row 2  = Pitching headers
-  // Sheet rows 3-12 = Pitching data
-  // Sheet row 24 = Batting headers
-  // Sheet rows 25-34 = Batting data
-  // Sheet row 45 = Fielding headers
-  // Sheet rows 46-55 = Fielding data
-  //
-  // JavaScript arrays are zero-based:
-  // Sheet row 3  => rows[2]
-  // Sheet row 25 => rows[24]
-  // Sheet row 46 => rows[45]
+  function cell(r, i){
+    return String((r && r[i]) || "").trim();
+  }
 
-  db.teamStats = rows.slice(2,12).map(r => ({
+  function findHeader(sectionName, keyA, keyB, keyC){
+    const sectionRow = rows.findIndex(r => cell(r,0).toLowerCase() === sectionName.toLowerCase());
+    const searchStart = sectionRow >= 0 ? sectionRow + 1 : 0;
+
+    for(let i=searchStart; i<rows.length; i++){
+      if(cell(rows[i],0) === keyA && cell(rows[i],1) === keyB && cell(rows[i],2) === keyC){
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function collectTeamRows(headerIndex){
+    if(headerIndex < 0) return [];
+    const out = [];
+
+    for(let i=headerIndex+1; i<rows.length; i++){
+      const r = rows[i] || [];
+      const tm = cell(r,1).toUpperCase();
+
+      // Stop when next section starts.
+      if(["BATTING","FIELDING","PITCHING"].includes(cell(r,0).toUpperCase())) break;
+
+      // Keep only actual team abbreviation rows.
+      if(/^[A-Z]{2,4}$/.test(tm)){
+        out.push(r);
+      }
+
+      // Once we already captured team rows, stop after blanks.
+      if(out.length && !tm && !cell(r,0)) break;
+    }
+
+    return out;
+  }
+
+  // PITCHING: header has Team | TM | W
+  const pitchingHeader = findHeader("Pitching", "Team", "TM", "W");
+  const pitchingRows = collectTeamRows(pitchingHeader);
+
+  db.teamStats = pitchingRows.map(r => ({
     logo: r[0],
-    team: String(r[1] || "").trim().toUpperCase(),
+    team: cell(r,1).toUpperCase(),
 
     W: r[2],
     L: r[3],
@@ -483,11 +511,15 @@ function parseTeamStats(){
     "BB/9": r[29],
     "SO/9": r[30],
     "SO/BB": r[31]
-  })).filter(t => t.team);
+  }));
 
-  db.teamBattingStats = rows.slice(24,34).map(r => ({
+  // BATTING: header has Team | TM | PA
+  const battingHeader = findHeader("Batting", "Team", "TM", "PA");
+  const battingRows = collectTeamRows(battingHeader);
+
+  db.teamBattingStats = battingRows.map(r => ({
     logo: r[0],
-    team: String(r[1] || "").trim().toUpperCase(),
+    team: cell(r,1).toUpperCase(),
 
     PA: r[2],
     AB: r[3],
@@ -515,11 +547,15 @@ function parseTeamStats(){
     R: r[25],
     SB: r[26],
     CS: r[27]
-  })).filter(t => t.team);
+  }));
 
-  db.teamFieldingStats = rows.slice(45,55).map(r => ({
+  // FIELDING: header has Team | TM | XCH
+  const fieldingHeader = findHeader("Fielding", "Team", "TM", "XCH");
+  const fieldingRows = collectTeamRows(fieldingHeader);
+
+  db.teamFieldingStats = fieldingRows.map(r => ({
     logo: r[0],
-    team: String(r[1] || "").trim().toUpperCase(),
+    team: cell(r,1).toUpperCase(),
 
     XCH: r[2],
     XHit: r[3],
@@ -532,7 +568,7 @@ function parseTeamStats(){
     "FLD%": r[10],
     "wF%": r[11],
     UER: r[12]
-  })).filter(t => t.team);
+  }));
 }
 
 function toObjects(rows,idx){
@@ -814,7 +850,7 @@ function renderPage(){
 
   if(state.page==="Leaderboards / Stats"){
     const data=state.stats==="Hitters"?db.leaders.Hitters:state.stats==="Pitchers"?db.leaders.Pitchers:db.leaders.Fielders;
-    return head("Leaderboards / Stats","Leaderboards copied exactly from the Leaders tab.","📊")+`
+    return head("Leaderboards / Stats","Leaderboards copied from the Leaders tab and showing top 5 per category.","📊")+`
       <div class="controls">${["Hitters","Pitchers","Fielders"].map(x=>btn(x,`state.stats='${x}';render()`,"pill-btn "+(state.stats===x?"active":""))).join("")}</div>
       <div class="grid grid-2">${Object.entries(data).map(([cat,rows])=>`
         <div><h2>${cat}</h2>${table([
@@ -863,7 +899,10 @@ function renderPage(){
       </div>`+
       `<div class="card"><h2>Raw Leaders Row 3</h2><pre style="white-space:pre-wrap;overflow:auto;">${JSON.stringify(raw3,null,2)}</pre></div>`+
       `<div class="card"><h2>Raw Leaders Row 4</h2><pre style="white-space:pre-wrap;overflow:auto;">${JSON.stringify(raw4,null,2)}</pre></div>`+
-      `<div class="card"><h2>Team Logo URLs From Standings</h2>${table([{key:"tm",label:"TM"},{key:"team",label:"Team"},{key:"logo",label:"Logo URL"}],logoRows)}</div>`;
+      `<div class="card"><h2>Team Logo URLs From Standings</h2>${table([{key:"tm",label:"TM"},{key:"team",label:"Team"},{key:"logo",label:"Logo URL"}],logoRows)}</div>`+
+      `<div class="card"><h2>Parsed OVR Team Hitting Row</h2>${table([
+        {key:"team",label:"TM"},{key:"PA",label:"PA"},{key:"AB",label:"AB"},{key:"H",label:"H"},{key:"RBI",label:"RBI"},{key:"HR",label:"HR"},{key:"AVG",label:"AVG"},{key:"OBP",label:"OBP"},{key:"SLG",label:"SLG"},{key:"OPS",label:"OPS"}
+      ], db.teamBattingStats.filter(x=>x.team==="OVR"))}</div>`;
   }
 
   return "";
